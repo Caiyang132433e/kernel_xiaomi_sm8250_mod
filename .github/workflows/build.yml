@@ -1,1 +1,156 @@
+name: Build Kernel (Droidspaces)
 
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: '设备代号 (device code)'
+        required: true
+        default: 'pipa'
+        type: choice
+        options:
+          - pipa
+          - elish
+          - enuma
+          - dagu
+          - alioth
+          - apollo
+          - lmi
+          - umi
+          - cmi
+          - cas
+          - thyme
+          - psyche
+          - munch
+      ksu:
+        description: '启用 KernelSU (ReSukiSU)'
+        required: true
+        type: boolean
+        default: true
+      ksu_ref:
+        description: 'KernelSU 版本（必须钉住；main 已到 rc3，与树内旧 susfs 冲突）'
+        required: true
+        type: string
+        default: 'v4.2.0-rc2'
+      susfs:
+        description: '启用 SuSFS（必须 true：关掉会让 KSU 落到 TP hook 分支，非 GKI 直接报错）'
+        required: true
+        type: boolean
+        default: true
+      ds:
+        description: '启用 Droidspaces 容器支持'
+        required: true
+        type: boolean
+        default: true
+      target_os:
+        description: '目标系统 (MIUI/HyperOS 机必须选 miui)'
+        required: true
+        type: choice
+        default: 'miui'
+        options:
+          - miui
+          - aosp
+          - both
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}-${{ github.event.inputs.device }}-${{ github.event.inputs.target_os }}
+  cancel-in-progress: true
+
+jobs:
+  build-kernel:
+    name: ${{ github.event.inputs.device }} | KSU:${{ github.event.inputs.ksu }} | DS:${{ github.event.inputs.ds }} | OS:${{ github.event.inputs.target_os }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 300
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost || true
+          df -h /
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison build-essential ccache cpio curl flex gawk git \
+            gnupg gperf imagemagick libelf-dev libncurses-dev libssl-dev \
+            libxml2 libxml2-utils lz4 lzop pngcrush rsync schedtool \
+            squashfs-tools xsltproc zip zlib1g-dev python3 dwarves \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache_mikernel
+          key: ${{ runner.os }}-ccache-${{ github.event.inputs.device }}-${{ hashFiles('build_kernel.sh', 'arch/arm64/configs/*.defconfig', 'patches/**') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-${{ github.event.inputs.device }}-
+            ${{ runner.os }}-ccache-
+
+      - name: Setup ZyC Clang 16
+        run: |
+          mkdir -p "$HOME/zyc-clang"
+          cd "$HOME/zyc-clang"
+          URL="https://github.com/ZyCromerZ/Clang/releases/download/16.0.6-20260510-release/Clang-16.0.6-20260510.tar.gz"
+          for i in 1 2 3; do
+            wget -q --tries=3 --timeout=120 -O Clang.tar.gz "$URL" && break
+            echo "retry $i with mirror..."
+            wget -q --tries=3 --timeout=120 -O Clang.tar.gz "https://ghproxy.net/$URL" || true
+            [ -s Clang.tar.gz ] && break
+          done
+          tar -zxf Clang.tar.gz
+          rm -f Clang.tar.gz
+          # 兼容两种打包结构：解出来直接是 bin/，或者多一层 clang/bin/
+          if [ ! -d "$HOME/zyc-clang/bin" ] && [ -d "$HOME/zyc-clang/clang/bin" ]; then
+            mv "$HOME/zyc-clang/clang"/* "$HOME/zyc-clang"/
+            rmdir "$HOME/zyc-clang/clang" 2>/dev/null || true
+          fi
+          ls -d "$HOME/zyc-clang/bin"
+          "$HOME/zyc-clang/bin/clang" --version
+          echo "$HOME/zyc-clang/bin" >> "$GITHUB_PATH"
+
+      - name: Build
+        env:
+          KSU_REF: ${{ github.event.inputs.ksu_ref }}
+          KSU_SUSFS: ${{ github.event.inputs.susfs == 'true' && '1' || '0' }}
+        run: |
+          chmod +x build_kernel.sh
+          ARGS="${{ github.event.inputs.device }}"
+          [ "${{ github.event.inputs.ksu }}" = "true" ] && ARGS="$ARGS ksu"
+          [ "${{ github.event.inputs.ds }}" = "true" ] && ARGS="$ARGS ds"
+          [ "${{ github.event.inputs.target_os }}" != "both" ] && ARGS="$ARGS ${{ github.event.inputs.target_os }}"
+          echo "==> ./build_kernel.sh $ARGS  (KSU_REF=$KSU_REF KSU_SUSFS=$KSU_SUSFS)"
+          ./build_kernel.sh $ARGS | tee build.log
+
+      - name: Verify built kernel (droidspaces markers)
+        run: |
+          ls -l APTKernel_*.zip
+          if [ "${{ github.event.inputs.ds }}" = "true" ]; then
+            python3 tools/check_ds_support.py APTKernel_*.zip
+          fi
+
+      - name: Upload flashable zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: APTKernel-${{ github.event.inputs.device }}-${{ github.event.inputs.target_os }}-DS${{ github.event.inputs.ds }}-${{ github.run_number }}
+          path: APTKernel_*.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ github.run_number }}
+          path: build.log
+          if-no-files-found: ignore
+          retention-days: 7
