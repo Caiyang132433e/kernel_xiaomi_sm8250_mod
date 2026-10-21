@@ -1,72 +1,58 @@
-name: Build Kernel (Droidspaces)
+name: Build Kernel (liyafe1997 + Droidspaces)
 
 on:
   workflow_dispatch:
     inputs:
       device:
-        description: '设备代号 (device code)'
+        description: 'Target Device Code (设备代号)'
         required: true
         default: 'pipa'
         type: choice
         options:
-          - pipa
-          - elish
-          - enuma
-          - dagu
           - alioth
           - apollo
-          - lmi
-          - umi
-          - cmi
           - cas
-          - thyme
-          - psyche
+          - cmi
+          - dagu
+          - elish
+          - enuma
+          - lmi
           - munch
+          - pipa
+          - psyche
+          - thyme
+          - umi
       ksu:
-        description: '启用 KernelSU (ReSukiSU)'
+        description: 'Enable KernelSU (liyafe1997 的 SukiSU fork，提交已固定)'
         required: true
         type: boolean
         default: true
-      ksu_ref:
-        description: 'KernelSU 版本（必须钉住；main 已到 rc3，与树内旧 susfs 冲突）'
+      droidspaces:
+        description: 'Enable Droidspaces (容器支持，唯一增量)'
+        required: true
+        type: boolean
+        default: true
+      kernel_name:
+        description: 'Kernel name suffix'
         required: true
         type: string
-        default: 'v4.2.0-rc2'
-      susfs:
-        description: '启用 SuSFS（必须 true：关掉会让 KSU 落到 TP hook 分支，非 GKI 直接报错）'
-        required: true
-        type: boolean
-        default: true
-      ds:
-        description: '启用 Droidspaces 容器支持'
-        required: true
-        type: boolean
-        default: true
-      target_os:
-        description: '目标系统 (MIUI/HyperOS 机必须选 miui)'
-        required: true
-        type: choice
-        default: 'miui'
-        options:
-          - miui
-          - aosp
-          - both
+        default: 'pipa-ds'
 
 permissions:
   contents: read
 
 concurrency:
-  group: build-${{ github.ref }}-${{ github.event.inputs.device }}-${{ github.event.inputs.target_os }}
+  group: build-${{ github.ref }}-${{ github.event.inputs.device }}
   cancel-in-progress: true
 
 jobs:
   build-kernel:
-    name: ${{ github.event.inputs.device }} | KSU:${{ github.event.inputs.ksu }} | DS:${{ github.event.inputs.ds }} | OS:${{ github.event.inputs.target_os }}
+    name: Build ${{ github.event.inputs.device }} | KSU:${{ github.event.inputs.ksu }} | DS:${{ github.event.inputs.droidspaces }}
     runs-on: ubuntu-22.04
-    timeout-minutes: 300
+    timeout-minutes: 330
 
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
@@ -76,25 +62,24 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost || true
           df -h /
 
-      - name: Install dependencies
+      - name: Set up Environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            bc bison build-essential ccache cpio curl flex gawk git \
-            gnupg gperf imagemagick libelf-dev libncurses-dev libssl-dev \
+          sudo apt-get install -y bc bison build-essential ccache cpio curl wget flex gawk \
+            git gnupg gperf imagemagick libelf-dev libncurses-dev libssl-dev \
             libxml2 libxml2-utils lz4 lzop pngcrush rsync schedtool \
-            squashfs-tools xsltproc zip zlib1g-dev python3 dwarves \
+            squashfs-tools xsltproc zip unzip zlib1g-dev python3 dwarves \
             gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
             gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi
 
-      - name: Restore ccache
+      - name: Cache ccache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ccache_mikernel
-          key: ${{ runner.os }}-ccache-${{ github.event.inputs.device }}-${{ hashFiles('build_kernel.sh', 'arch/arm64/configs/*.defconfig', 'patches/**') }}
+          key: ${{ runner.os }}-ccache-lcl-${{ github.event.inputs.device }}-${{ hashFiles('build.sh', 'arch/arm64/configs/*_defconfig') }}
           restore-keys: |
-            ${{ runner.os }}-ccache-${{ github.event.inputs.device }}-
-            ${{ runner.os }}-ccache-
+            ${{ runner.os }}-ccache-lcl-${{ github.event.inputs.device }}-
+            ${{ runner.os }}-ccache-lcl-
 
       - name: Setup ZyC Clang 16
         run: |
@@ -103,46 +88,119 @@ jobs:
           URL="https://github.com/ZyCromerZ/Clang/releases/download/16.0.6-20260510-release/Clang-16.0.6-20260510.tar.gz"
           for i in 1 2 3; do
             wget -q --tries=3 --timeout=120 -O Clang.tar.gz "$URL" && break
-            echo "retry $i with mirror..."
+            echo "retry $i ..."
             wget -q --tries=3 --timeout=120 -O Clang.tar.gz "https://ghproxy.net/$URL" || true
             [ -s Clang.tar.gz ] && break
           done
           tar -zxf Clang.tar.gz
           rm -f Clang.tar.gz
-          # 兼容两种打包结构：解出来直接是 bin/，或者多一层 clang/bin/
           if [ ! -d "$HOME/zyc-clang/bin" ] && [ -d "$HOME/zyc-clang/clang/bin" ]; then
             mv "$HOME/zyc-clang/clang"/* "$HOME/zyc-clang"/
-            rmdir "$HOME/zyc-clang/clang" 2>/dev/null || true
           fi
-          ls -d "$HOME/zyc-clang/bin"
           "$HOME/zyc-clang/bin/clang" --version
           echo "$HOME/zyc-clang/bin" >> "$GITHUB_PATH"
 
-      - name: Build
-        env:
-          KSU_REF: ${{ github.event.inputs.ksu_ref }}
-          KSU_SUSFS: ${{ github.event.inputs.susfs == 'true' && '1' || '0' }}
+      - name: Prepare build.sh (toolchain + droidspaces)
         run: |
-          chmod +x build_kernel.sh
-          ARGS="${{ github.event.inputs.device }}"
-          [ "${{ github.event.inputs.ksu }}" = "true" ] && ARGS="$ARGS ksu"
-          [ "${{ github.event.inputs.ds }}" = "true" ] && ARGS="$ARGS ds"
-          [ "${{ github.event.inputs.target_os }}" != "both" ] && ARGS="$ARGS ${{ github.event.inputs.target_os }}"
-          echo "==> ./build_kernel.sh $ARGS  (KSU_REF=$KSU_REF KSU_SUSFS=$KSU_SUSFS)"
-          ./build_kernel.sh $ARGS | tee build.log
+          set -e
+          # 1) 工具链指向 ZyC clang 16（proton-clang 20210522 的发布资产已被作者删除）
+          sed -i "s#^TOOLCHAIN_PATH=.*#TOOLCHAIN_PATH=\$HOME/zyc-clang/bin#" build.sh
+          # 2) 用 LLVM=1 / LLVM_IAS=1（clang 16 自带的 lld 与集成汇编器）
+          sed -i 's#^MAKE_ARGS=.*#MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=clang LLVM=1 LLVM_IAS=1 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu-"#' build.sh
 
-      - name: Verify built kernel (droidspaces markers)
-        run: |
-          ls -l APTKernel_*.zip
-          if [ "${{ github.event.inputs.ds }}" = "true" ]; then
-            python3 tools/check_ds_support.py APTKernel_*.zip
+          DEFCONFIG="arch/arm64/configs/${{ github.event.inputs.device }}_defconfig"
+
+          # 3) 内核显示名
+          if [ -n "${{ github.event.inputs.kernel_name }}" ]; then
+            sed -i "s|^CONFIG_LOCALVERSION=.*|CONFIG_LOCALVERSION=\"-${{ github.event.inputs.kernel_name }}\"|" "$DEFCONFIG"
           fi
 
-      - name: Upload flashable zip
+          # 4) 唯一增量：droidspaces 必需配置（追加在 defconfig 末尾，后者覆盖前者）
+          if [ "${{ github.event.inputs.droidspaces }}" = "true" ]; then
+            cat >> "$DEFCONFIG" <<'DS_CONFIG_EOF'
+          # ---- Droidspaces required ----
+          CONFIG_SYSVIPC=y
+          CONFIG_POSIX_MQUEUE=y
+          CONFIG_NAMESPACES=y
+          CONFIG_PID_NS=y
+          CONFIG_UTS_NS=y
+          CONFIG_IPC_NS=y
+          CONFIG_USER_NS=y
+          CONFIG_NET_NS=y
+          CONFIG_SECCOMP=y
+          CONFIG_SECCOMP_FILTER=y
+          CONFIG_CGROUPS=y
+          CONFIG_CGROUP_DEVICE=y
+          CONFIG_CGROUP_FREEZER=y
+          CONFIG_CGROUP_SCHED=y
+          CONFIG_FAIR_GROUP_SCHED=y
+          CONFIG_CFS_BANDWIDTH=y
+          CONFIG_CGROUP_PIDS=y
+          CONFIG_CGROUP_CPUACCT=y
+          CONFIG_MEMCG=y
+          CONFIG_DEVTMPFS=y
+          CONFIG_OVERLAY_FS=y
+          CONFIG_TMPFS_POSIX_ACL=y
+          CONFIG_TMPFS_XATTR=y
+          # CONFIG_ANDROID_PARANOID_NETWORK is not set
+          DS_CONFIG_EOF
+            echo "[*] droidspaces config appended; tail of defconfig:"
+            tail -n 26 "$DEFCONFIG"
+          fi
+
+          echo "[*] toolchain / make args:"
+          grep -n '^TOOLCHAIN_PATH=' build.sh
+          grep -n '^MAKE_ARGS=' build.sh
+          echo "[*] KernelSU line (作者已固定提交):"
+          grep -n 'setup.sh' build.sh || true
+
+      - name: Run build.sh
+        run: |
+          set -o pipefail
+          ARGS="${{ github.event.inputs.device }}"
+          if [ "${{ github.event.inputs.ksu }}" = "true" ]; then ARGS="$ARGS ksu"; fi
+          echo "==> bash build.sh $ARGS"
+          bash build.sh $ARGS 2>&1 | tee build.log
+
+      - name: Verify droidspaces markers in MIUI kernel
+        if: ${{ github.event.inputs.droidspaces == 'true' }}
+        run: |
+          set -e
+          ls -l Kernel_*.zip
+          python3 - <<'PY'
+          import glob, re, sys, zipfile
+          MARKERS = {
+              "CONFIG_DEVTMPFS": b"devtmpfs: initialized",
+              "CONFIG_PID_NS": b"pid_for_children",
+              "CONFIG_SYSVIPC": b"sysvipc",
+          }
+          files = sorted(glob.glob("Kernel_MIUI_*.zip")) or sorted(glob.glob("Kernel_*.zip"))
+          if not files:
+              sys.exit("没找到 Kernel_*.zip")
+          target = files[0]
+          print("检查:", target)
+          z = zipfile.ZipFile(target)
+          imgs = [n for n in z.namelist() if re.search(r"(^|/)Image$", n)]
+          if not imgs:
+              sys.exit("zip 里没有 Image")
+          blob = z.read(imgs[0])
+          m = re.search(rb"Linux version [^\x00]{0,120}", blob)
+          print("version:", m.group(0).decode("utf-8", "replace") if m else "?")
+          bad = 0
+          for k, v in MARKERS.items():
+              c = blob.count(v)
+              print("  %-18s %-26s hits=%d" % (k, v.decode(), c))
+              bad += (c == 0)
+          if bad:
+              sys.exit("缺少 %d 项 droidspaces 能力，别刷这个包" % bad)
+          print("PASS: droidspaces 能力齐全")
+          PY
+
+      - name: Upload flashable zips
         uses: actions/upload-artifact@v4
         with:
-          name: APTKernel-${{ github.event.inputs.device }}-${{ github.event.inputs.target_os }}-DS${{ github.event.inputs.ds }}-${{ github.run_number }}
-          path: APTKernel_*.zip
+          name: Kernel-${{ github.event.inputs.device }}-DS${{ github.event.inputs.droidspaces }}-${{ github.run_number }}
+          path: Kernel_*.zip
           if-no-files-found: error
           retention-days: 30
 
