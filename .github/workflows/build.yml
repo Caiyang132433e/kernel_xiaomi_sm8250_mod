@@ -37,6 +37,11 @@ on:
         required: true
         type: string
         default: 'pipa-ds'
+      miui_only:
+        description: '只编 MIUI（跳过 AOSP，省一半时间）'
+        required: true
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -153,6 +158,44 @@ jobs:
           grep -n '^MAKE_ARGS=' build.sh
           echo "[*] KernelSU line (作者已固定提交):"
           grep -n 'setup.sh' build.sh || true
+
+      - name: Fix Xiaomi PERF_HUMANTASK null-deref (PID_NS 容器崩溃)
+        run: |
+          set -e
+          python3 - <<'PY'
+          import sys
+          p = "fs/exec.c"
+          s = open(p, encoding="utf-8", errors="surrogateescape").read()
+          old = 'if (!strcmp(parent->comm, "system_server")) {'
+          new = 'if (parent && !strcmp(parent->comm, "system_server")) {'
+          if new in s:
+              print("[=] 已经修过，跳过")
+          elif old in s:
+              s = s.replace(old, new, 1)
+              open(p, "w", encoding="utf-8", errors="surrogateescape").write(s)
+              print("[+] 已修复 __set_task_comm: parent 为 NULL 时不再解引用")
+          else:
+              sys.exit("[!] fs/exec.c 里找不到目标代码，请人工检查")
+          PY
+          grep -n 'system_server' fs/exec.c
+
+      - name: Skip AOSP build (只编 MIUI)
+        if: ${{ github.event.inputs.miui_only == 'true' }}
+        run: |
+          set -e
+          python3 - <<'PY'
+          p = "build.sh"
+          s = open(p, encoding="utf-8", errors="surrogateescape").read()
+          a = "# ------------- Building for AOSP -------------"
+          b = "# ------------- End of Building for AOSP -------------"
+          i = s.index(a)
+          j = s.index(b)
+          block = s[i:j]
+          commented = "\n".join("#SKIP# " + ln for ln in block.splitlines())
+          s = s[:i] + commented + "\n" + s[j:]
+          open(p, "w", encoding="utf-8", errors="surrogateescape").write(s)
+          print("[+] 已注释掉 AOSP 构建块（%d 行），只编 MIUI" % len(block.splitlines()))
+          PY
 
       - name: Run build.sh
         run: |
