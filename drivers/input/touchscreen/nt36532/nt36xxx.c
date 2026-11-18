@@ -1200,7 +1200,9 @@ int switch_pen_input_device(void) {
 
 	msleep(35);
 	mutex_lock(&ts->pen_switch_lock);
-	enable = ((ts->pen_bluetooth_connect) && !(ts->pen_charge_connect) && !(ts->game_mode_enable));
+	/* MOD: 无蓝牙笔也强制开启笔通道（替代 MaxMiPad 的去除蓝牙限制） */
+	ts->pen_bluetooth_connect = 1;
+	enable = (!(ts->pen_charge_connect) && !(ts->game_mode_enable));
 #ifdef CONFIG_FACTORY_BUILD
 	enable = 1;
 	ts->pen_bluetooth_connect = 1;
