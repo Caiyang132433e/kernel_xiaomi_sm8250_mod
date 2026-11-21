@@ -85,7 +85,7 @@ clang --version
 KSU_ZIP_STR=NoKernelSU
 if [ "$2" == "ksu" ]; then
     KSU_ENABLE=1
-    KSU_ZIP_STR=SukiSU-SUSFS
+    KSU_ZIP_STR=Nova-NoSUSFS
 else
     KSU_ENABLE=0
 fi
@@ -94,8 +94,13 @@ fi
 echo "TARGET_DEVICE: $TARGET_DEVICE"
 
 if [ $KSU_ENABLE -eq 1 ]; then
-    echo "KSU is enabled"
-    curl -LSs "https://github.com/liyafe1997/SukiSU-Ultra/raw/4ff14cf0051d04209c4abd5027d99d8e7780ef5b/kernel/setup.sh" | bash -s f4863b20cc8dc0f8cc67418980f022e43014b598
+    echo "KSU is enabled (SukiSU-Nova builtin, stage 1: no SUSFS)"
+    rm -rf KernelSU
+    git clone --depth 1 --branch builtin https://github.com/SukiSU-Nova/SukiSU-Nova KernelSU
+    (cd KernelSU && (git checkout 4bec532dd447e2852aa8932afa768255350c103a || (git fetch --depth 1 origin 4bec532dd447e2852aa8932afa768255350c103a && git checkout 4bec532dd447e2852aa8932afa768255350c103a)))
+    ln -sfn "$PWD/KernelSU/kernel" drivers/kernelsu
+    grep -q 'kernelsu' drivers/Makefile || echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
+    grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig || sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
 else
     echo "KSU is disabled"
 fi
@@ -123,23 +128,8 @@ make $MAKE_ARGS ${TARGET_DEVICE}_defconfig
 if [ $KSU_ENABLE -eq 1 ]; then
     scripts/config --file out/.config \
     -e KSU \
-    -e KSU_MANUAL_HOOK \
-    -e KSU_SUSFS_HAS_MAGIC_MOUNT \
-    -d KSU_SUSFS_SUS_PATH \
-    -e KSU_SUSFS_SUS_MOUNT \
-    -e KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT \
-    -e KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT \
-    -e KSU_SUSFS_SUS_KSTAT \
-    -d KSU_SUSFS_SUS_OVERLAYFS \
-    -e KSU_SUSFS_TRY_UMOUNT \
-    -e KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT \
-    -e KSU_SUSFS_SPOOF_UNAME \
-    -e KSU_SUSFS_ENABLE_LOG \
-    -e KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
-    -e KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
-    -d KSU_SUSFS_OPEN_REDIRECT \
-    -d KSU_SUSFS_SUS_SU \
-    -e KPM
+    -d KSU_SUSFS \
+    -d KPM
 else
     scripts/config --file out/.config -d KSU
 fi
@@ -161,16 +151,7 @@ rm -rf anykernel/kernels/
 
 mkdir -p anykernel/kernels/
 
-# Patch for SukiSU KPM support. 
-if [ $KSU_ENABLE -eq 1 ]; then
-    cd out/arch/arm64/boot/
-    wget https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/download/0.12.0/patch_linux
-    chmod +x patch_linux
-    ./patch_linux
-    rm Image
-    mv oImage Image
-    cd -
-fi
+
 
 cp out/arch/arm64/boot/Image anykernel/kernels/
 cp out/arch/arm64/boot/dtb anykernel/kernels/
@@ -262,23 +243,8 @@ make $MAKE_ARGS ${TARGET_DEVICE}_defconfig
 if [ $KSU_ENABLE -eq 1 ]; then
     scripts/config --file out/.config \
     -e KSU \
-    -e KSU_MANUAL_HOOK \
-    -e KSU_SUSFS_HAS_MAGIC_MOUNT \
-    -d KSU_SUSFS_SUS_PATH \
-    -e KSU_SUSFS_SUS_MOUNT \
-    -e KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT \
-    -e KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT \
-    -e KSU_SUSFS_SUS_KSTAT \
-    -d KSU_SUSFS_SUS_OVERLAYFS \
-    -e KSU_SUSFS_TRY_UMOUNT \
-    -e KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT \
-    -e KSU_SUSFS_SPOOF_UNAME \
-    -e KSU_SUSFS_ENABLE_LOG \
-    -e KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
-    -e KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
-    -d KSU_SUSFS_OPEN_REDIRECT \
-    -d KSU_SUSFS_SUS_SU \
-    -e KPM
+    -d KSU_SUSFS \
+    -d KPM
 else
     scripts/config --file out/.config -d KSU
 fi
@@ -335,16 +301,7 @@ mv .dts.bak ${dts_source}
 rm -rf anykernel/kernels/
 mkdir -p anykernel/kernels/
 
-# Patch for SukiSU KPM support. 
-if [ $KSU_ENABLE -eq 1 ]; then
-    cd out/arch/arm64/boot/
-    wget https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/download/0.12.0/patch_linux
-    chmod +x patch_linux
-    ./patch_linux
-    rm Image
-    mv oImage Image
-    cd -
-fi
+
 
 cp out/arch/arm64/boot/Image anykernel/kernels/
 cp out/arch/arm64/boot/dtb anykernel/kernels/
@@ -369,3 +326,4 @@ mv $ZIP_FILENAME ../
 cd ..
 
 echo "Done. The flashable zip is: [./$ZIP_FILENAME]"
+
