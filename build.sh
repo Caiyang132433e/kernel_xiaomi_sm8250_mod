@@ -124,6 +124,8 @@ if '#ifndef MODULE_IMPORT_NS' not in s:
     s = s.replace('#include <linux/module.h>', '#include <linux/module.h>\n#ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(x)\n#endif', 1)
     open(p, 'w').write(s)
 PY
+    for f in $(grep -rl '#include <linux/hex.h>' KernelSU/kernel 2>/dev/null); do sed -i 's|#include <linux/hex.h>|#include <linux/kernel.h>|' "$f"; done
+    for f in $(grep -rl '#include <linux/minmax.h>' KernelSU/kernel 2>/dev/null); do sed -i 's|#include <linux/minmax.h>|#include <linux/kernel.h>|' "$f"; done
     for f in KernelSU/kernel/feature/sucompat.c KernelSU/kernel/feature/patch_memory.c; do
         [ -f "$f" ] && sed -i '/#include <linux\/pgtable.h>/d' "$f"
     done
