@@ -117,6 +117,13 @@ KSU_COMPAT_EOF
         sed -i '/^ccflags-y += -Wno-strict-prototypes/i ccflags-y += -Wno-unused-variable -Wno-macro-redefined' KernelSU/kernel/Makefile
         sed -i 's/^KSU_VERSION .*/KSU_VERSION     := 35000/' KernelSU/kernel/Makefile
     fi
+    python3 - <<'PY'
+p = 'KernelSU/kernel/core/init.c'
+s = open(p).read()
+if '#ifndef MODULE_IMPORT_NS' not in s:
+    s = s.replace('#include <linux/module.h>', '#include <linux/module.h>\n#ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(x)\n#endif', 1)
+    open(p, 'w').write(s)
+PY
     ln -sfn "$PWD/KernelSU/kernel" drivers/kernelsu
     grep -q 'kernelsu' drivers/Makefile || echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
     grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig || sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
