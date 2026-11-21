@@ -98,6 +98,7 @@ if [ $KSU_ENABLE -eq 1 ]; then
     rm -rf KernelSU
     git clone --depth 1 --branch builtin https://github.com/SukiSU-Nova/SukiSU-Nova KernelSU
     (cd KernelSU && (git checkout 4bec532dd447e2852aa8932afa768255350c103a || (git fetch --depth 1 origin 4bec532dd447e2852aa8932afa768255350c103a && git checkout 4bec532dd447e2852aa8932afa768255350c103a)))
+    sed -i '/#include <linux\/static_call.h>/d; /#include <linux\/hex.h>/d' KernelSU/kernel/kernel_includes.h
     ln -sfn "$PWD/KernelSU/kernel" drivers/kernelsu
     grep -q 'kernelsu' drivers/Makefile || echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
     grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig || sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
