@@ -102,6 +102,7 @@ if [ $KSU_ENABLE -eq 1 ]; then
     sed -i '/#define KSU_CAN_USE_KPM/i #if defined(CONFIG_KPM)' KernelSU/kernel/kernel_compat.h
     sed -i '/#define KSU_CAN_USE_KPM/a #endif' KernelSU/kernel/kernel_compat.h
     sed -i '/^ccflags-y += -Wno-strict-prototypes/i ccflags-y += -Wno-unused-variable -Wno-macro-redefined' KernelSU/kernel/Makefile
+    sed -i 's/^KSU_VERSION .*/KSU_VERSION     := 35000/' KernelSU/kernel/Makefile
     ln -sfn "$PWD/KernelSU/kernel" drivers/kernelsu
     grep -q 'kernelsu' drivers/Makefile || echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
     grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig || sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
