@@ -105,6 +105,14 @@ if [ $KSU_ENABLE -eq 1 ]; then
         sed -i '/#define KSU_CAN_USE_KPM/i #if defined(CONFIG_KPM)' KernelSU/kernel/kernel_compat.h
         sed -i '/#define KSU_CAN_USE_KPM/a #endif' KernelSU/kernel/kernel_compat.h
     fi
+    if [ -f KernelSU/kernel/kernel_compat.h ]; then
+        cat >> KernelSU/kernel/kernel_compat.h <<'KSU_COMPAT_EOF'
+
+#ifndef MODULE_IMPORT_NS
+#define MODULE_IMPORT_NS(x)
+#endif
+KSU_COMPAT_EOF
+    fi
     if [ -f KernelSU/kernel/Makefile ]; then
         sed -i '/^ccflags-y += -Wno-strict-prototypes/i ccflags-y += -Wno-unused-variable -Wno-macro-redefined' KernelSU/kernel/Makefile
         sed -i 's/^KSU_VERSION .*/KSU_VERSION     := 35000/' KernelSU/kernel/Makefile
