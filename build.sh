@@ -124,6 +124,9 @@ if '#ifndef MODULE_IMPORT_NS' not in s:
     s = s.replace('#include <linux/module.h>', '#include <linux/module.h>\n#ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(x)\n#endif', 1)
     open(p, 'w').write(s)
 PY
+    for f in KernelSU/kernel/feature/sucompat.c KernelSU/kernel/feature/patch_memory.c; do
+        [ -f "$f" ] && sed -i '/#include <linux\/pgtable.h>/d' "$f"
+    done
     ln -sfn "$PWD/KernelSU/kernel" drivers/kernelsu
     grep -q 'kernelsu' drivers/Makefile || echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
     grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig || sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
