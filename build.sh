@@ -103,6 +103,7 @@ if [ $KSU_ENABLE -eq 1 ]; then
     KSU_VERSION_PIN="${KSU_VERSION_PIN}" bash scripts/nova/setup_nova.sh "${KSU_BRANCH}" "${KSU_REF}"
     # 4.19 tree adaptations: exec call sites (NULL deref fix) + reboot supercall hook
     python3 scripts/nova/apply_tree_hooks.py
+    python3 scripts/nova/apply_susfs157.py
 else
     echo "KSU is disabled"
 fi
@@ -153,6 +154,17 @@ if [ $KSU_ENABLE -eq 1 ]; then
     scripts/config --file out/.config \
     -e KSU \
     -e KSU_DEBUG \
+    -e KSU_SUSFS_LEGACY \
+    -e KSU_SUSFS_SUS_PATH \
+    -e KSU_SUSFS_SUS_KSTAT \
+    -e KSU_SUSFS_TRY_UMOUNT \
+    -e KSU_SUSFS_SPOOF_UNAME \
+    -e KSU_SUSFS_ENABLE_LOG \
+    -e KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
+    -e KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
+    -d KSU_SUSFS_SUS_MOUNT \
+    -d KSU_SUSFS_OPEN_REDIRECT \
+    -d KSU_SUSFS_SUS_SU \
     -d KSU_SUSFS \
     -e PSTORE \
     -e PSTORE_RAM \
@@ -275,6 +287,17 @@ if [ $KSU_ENABLE -eq 1 ]; then
     scripts/config --file out/.config \
     -e KSU \
     -e KSU_DEBUG \
+    -e KSU_SUSFS_LEGACY \
+    -e KSU_SUSFS_SUS_PATH \
+    -e KSU_SUSFS_SUS_KSTAT \
+    -e KSU_SUSFS_TRY_UMOUNT \
+    -e KSU_SUSFS_SPOOF_UNAME \
+    -e KSU_SUSFS_ENABLE_LOG \
+    -e KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
+    -e KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
+    -d KSU_SUSFS_SUS_MOUNT \
+    -d KSU_SUSFS_OPEN_REDIRECT \
+    -d KSU_SUSFS_SUS_SU \
     -d KSU_SUSFS \
     -e PSTORE \
     -e PSTORE_RAM \
