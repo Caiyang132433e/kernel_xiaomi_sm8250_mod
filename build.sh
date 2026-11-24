@@ -9,6 +9,10 @@ TOOLCHAIN_PATH=$HOME/proton-clang/proton-clang-20210522/bin
 GIT_COMMIT_ID=$(git rev-parse --short=8 HEAD)
 TARGET_DEVICE=$1
 
+# SukiSU-Nova (non-GKI, 4.19) integration
+KSU_REF="${KSU_REF:-c60f21b9e00e35e898f8d21e0612465b76b9beec}"
+KSU_VERSION_PIN="${KSU_VERSION_PIN:-35000}"
+
 if [ -z "$1" ]; then
     echo "Error: No argument provided, please specific a target device." 
     echo "If you need KernelSU, please add [ksu] as the second arg."
@@ -94,8 +98,8 @@ fi
 echo "TARGET_DEVICE: $TARGET_DEVICE"
 
 if [ $KSU_ENABLE -eq 1 ]; then
-    echo "KSU is enabled"
-    curl -LSs "https://github.com/liyafe1997/SukiSU-Ultra/raw/4ff14cf0051d04209c4abd5027d99d8e7780ef5b/kernel/setup.sh" | bash -s f4863b20cc8dc0f8cc67418980f022e43014b598
+    echo "KSU is enabled (SukiSU-Nova ${KSU_REF})"
+    KSU_VERSION_PIN="${KSU_VERSION_PIN}" bash scripts/nova/setup_nova.sh "${KSU_REF}"
 else
     echo "KSU is disabled"
 fi
@@ -108,6 +112,28 @@ rm -rf anykernel/
 
 echo "Clone AnyKernel3 for packing kernel (repo: https://github.com/liyafe1997/AnyKernel3)"
 git clone https://github.com/liyafe1997/AnyKernel3 -b kona --single-branch --depth=1 anykernel
+
+# --- slot guard: this package must only ever flash slot A (slot B is Ubuntu) ---
+python3 - <<'PY'
+p = 'anykernel/anykernel.sh'
+s = open(p).read()
+if 'slot_select=active;' not in s:
+    s = s.replace('block=boot;', 'block=boot;\nslot_select=active;', 1)
+if 'slot guard' not in s:
+    s = s.replace(
+        'split_boot;',
+        'split_boot;\n\n'
+        '# --- slot guard: only slot A is allowed (slot B = Ubuntu) ---\n'
+        'if [ "$slot" != "_a" ]; then\n'
+        '  ui_print "!! current slot [$slot] is not _a, refusing to flash"; abort;\n'
+        'fi;\n',
+        1,
+    )
+open(p, 'w').write(s)
+print('[*] anykernel slot guard installed')
+PY
+grep -n 'slot guard' anykernel/anykernel.sh
+
 
 # Add date to local version
 local_version_str="-perf"
@@ -123,23 +149,16 @@ make $MAKE_ARGS ${TARGET_DEVICE}_defconfig
 if [ $KSU_ENABLE -eq 1 ]; then
     scripts/config --file out/.config \
     -e KSU \
-    -e KSU_MANUAL_HOOK \
-    -e KSU_SUSFS_HAS_MAGIC_MOUNT \
-    -d KSU_SUSFS_SUS_PATH \
-    -e KSU_SUSFS_SUS_MOUNT \
-    -e KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT \
-    -e KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT \
-    -e KSU_SUSFS_SUS_KSTAT \
-    -d KSU_SUSFS_SUS_OVERLAYFS \
-    -e KSU_SUSFS_TRY_UMOUNT \
-    -e KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT \
-    -e KSU_SUSFS_SPOOF_UNAME \
-    -e KSU_SUSFS_ENABLE_LOG \
-    -e KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
-    -e KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
-    -d KSU_SUSFS_OPEN_REDIRECT \
-    -d KSU_SUSFS_SUS_SU \
-    -e KPM
+    -e KPROBES \
+    -e KRETPROBES \
+    -e KSU_DEBUG \
+    -e PSTORE \
+    -e PSTORE_RAM \
+    -e PSTORE_CONSOLE \
+    -e PSTORE_PMSG \
+    -d KPM \
+    -d PANIC_ON_OOPS \
+    -d SECURITY_DMESG_RESTRICT
 else
     scripts/config --file out/.config -d KSU
 fi
@@ -262,23 +281,16 @@ make $MAKE_ARGS ${TARGET_DEVICE}_defconfig
 if [ $KSU_ENABLE -eq 1 ]; then
     scripts/config --file out/.config \
     -e KSU \
-    -e KSU_MANUAL_HOOK \
-    -e KSU_SUSFS_HAS_MAGIC_MOUNT \
-    -d KSU_SUSFS_SUS_PATH \
-    -e KSU_SUSFS_SUS_MOUNT \
-    -e KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT \
-    -e KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT \
-    -e KSU_SUSFS_SUS_KSTAT \
-    -d KSU_SUSFS_SUS_OVERLAYFS \
-    -e KSU_SUSFS_TRY_UMOUNT \
-    -e KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT \
-    -e KSU_SUSFS_SPOOF_UNAME \
-    -e KSU_SUSFS_ENABLE_LOG \
-    -e KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
-    -e KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
-    -d KSU_SUSFS_OPEN_REDIRECT \
-    -d KSU_SUSFS_SUS_SU \
-    -e KPM
+    -e KPROBES \
+    -e KRETPROBES \
+    -e KSU_DEBUG \
+    -e PSTORE \
+    -e PSTORE_RAM \
+    -e PSTORE_CONSOLE \
+    -e PSTORE_PMSG \
+    -d KPM \
+    -d PANIC_ON_OOPS \
+    -d SECURITY_DMESG_RESTRICT
 else
     scripts/config --file out/.config -d KSU
 fi
