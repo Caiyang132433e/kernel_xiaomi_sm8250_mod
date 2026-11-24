@@ -50,6 +50,25 @@ if [ -f "$K/kernel_compat.h" ] && ! grep -q 'KSU_MODULE_IMPORT_NS_SHIM' "$K/kern
 EOF
 fi
 
+# 4) MODULE_IMPORT_NS is used in core/init.c, which does not include kernel_compat.h
+if [ -f "$K/core/init.c" ] && ! grep -q 'KSU_MODULE_IMPORT_NS_SHIM' "$K/core/init.c"; then
+    python3 - "$K/core/init.c" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+shim = ('/* KSU_MODULE_IMPORT_NS_SHIM */\n'
+        '#ifndef MODULE_IMPORT_NS\n'
+        '#define MODULE_IMPORT_NS(x)\n'
+        '#endif\n')
+if '#include <linux/module.h>' in s:
+    s = s.replace('#include <linux/module.h>', '#include <linux/module.h>\n' + shim, 1)
+else:
+    s = shim + s
+open(p, 'w').write(s)
+print('[*] MODULE_IMPORT_NS shim injected into core/init.c')
+PY
+fi
+
 # ---------- build knobs ----------
 if [ -f "$K/Makefile" ]; then
     sed -i '/^ccflags-y += -Wno-strict-prototypes/i ccflags-y += -Wno-unused-variable -Wno-macro-redefined' "$K/Makefile"
