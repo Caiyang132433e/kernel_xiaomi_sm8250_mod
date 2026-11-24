@@ -12,7 +12,7 @@ TARGET_DEVICE=$1
 # SukiSU-Nova (non-GKI, 4.19) integration -- builtin branch = manual hooks
 KSU_BRANCH="${KSU_BRANCH:-builtin}"
 KSU_REF="${KSU_REF:-4bec532dd447e2852aa8932afa768255350c103a}"
-KSU_VERSION_PIN="${KSU_VERSION_PIN:-35000}"
+KSU_VERSION_PIN="${KSU_VERSION_PIN:-30007}"
 
 if [ -z "$1" ]; then
     echo "Error: No argument provided, please specific a target device." 
