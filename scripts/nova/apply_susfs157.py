@@ -203,10 +203,27 @@ def copy_glue():
     shutil.copyfile(src, dst)
     print(f"[+] copied {src} -> {dst}")
 
+def patch_sched_h():
+    """task_struct fields are guarded by the CONFIG_KSU_SUSFS umbrella, which we
+    deliberately do not define.  Re-key those guards to the legacy symbol."""
+    p = Path("include/linux/sched.h")
+    s = p.read_text(encoding="utf-8", errors="surrogateescape")
+    if "CONFIG_KSU_SUSFS_LEGACY" in s:
+        print("[=] sched.h already re-keyed")
+        return
+    n1 = s.count("defined(CONFIG_KSU_SUSFS)")
+    s = s.replace("defined(CONFIG_KSU_SUSFS)", "defined(CONFIG_KSU_SUSFS_LEGACY)")
+    n2 = s.count("#ifdef CONFIG_KSU_SUSFS\n")
+    s = s.replace("#ifdef CONFIG_KSU_SUSFS\n", "#ifdef CONFIG_KSU_SUSFS_LEGACY\n")
+    if n1 + n2 == 0:
+        sys.exit("[!] sched.h: no CONFIG_KSU_SUSFS guards found")
+    p.write_text(s, encoding="utf-8", errors="surrogateescape")
+    print(f"[+] sched.h: re-keyed {n1 + n2} guard(s) to KSU_SUSFS_LEGACY")
 
 if __name__ == "__main__":
     patch_makefile()
     patch_kconfig()
+    patch_sched_h()
     patch_sys_prctl()
     patch_ksu_init()
     patch_unity_include()
