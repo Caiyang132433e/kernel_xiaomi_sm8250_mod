@@ -9,7 +9,7 @@ set -eu
 
 BRANCH="${1:-builtin}"
 REF="${2:-4bec532dd447e2852aa8932afa768255350c103a}"
-KSU_VERSION_PIN="${KSU_VERSION_PIN:-35000}"
+KSU_VERSION_PIN="${KSU_VERSION_PIN:-30007}"
 ROOT="$(pwd)"
 
 [ -d drivers ] || { echo "[!] must run from kernel root"; exit 1; }
