@@ -179,19 +179,20 @@ def patch_ksu_init():
     print("[+] ksu_main.c: susfs_legacy_init() wired")
 
 
-def patch_kbuild():
-    p = Path("KernelSU/kernel/Kbuild")
+def patch_unity_include():
+    """builtin branch is a unity build: ksu_main.c #includes every .c file."""
+    p = Path("KernelSU/kernel/ksu_main.c")
     s = p.read_text(encoding="utf-8", errors="surrogateescape")
-    line = "kernelsu-objs += feature/susfs_legacy.o"
+    line = '#include "feature/susfs_legacy.c"'
     if line in s:
-        print("[=] Kbuild already patched")
+        print("[=] ksu_main.c already includes the glue")
         return
-    anchor = "kernelsu-objs += feature/adb_root.o"
+    anchor = '#include "feature/adb_root.c"'
     if anchor not in s:
-        sys.exit("[!] Kbuild: adb_root anchor not found")
-    s = s.replace(anchor, line + "\n" + anchor, 1)
+        sys.exit("[!] ksu_main.c: adb_root.c include not found")
+    s = s.replace(anchor, anchor + "\n" + line, 1)
     p.write_text(s, encoding="utf-8", errors="surrogateescape")
-    print("[+] Kbuild: feature/susfs_legacy.o added")
+    print("[+] ksu_main.c: unity-includes feature/susfs_legacy.c")
 
 
 def copy_glue():
@@ -208,6 +209,6 @@ if __name__ == "__main__":
     patch_kconfig()
     patch_sys_prctl()
     patch_ksu_init()
-    patch_kbuild()
+    patch_unity_include()
     copy_glue()
     print("[*] SUSFS 1.5.7 legacy glue applied")
