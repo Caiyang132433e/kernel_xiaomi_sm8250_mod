@@ -1,6 +1,8 @@
 name: Build Kernel (liyafe1997 + Droidspaces)
 
 on:
+  push:
+    branches: [ nova-forensic ]
   workflow_dispatch:
     inputs:
       device:
