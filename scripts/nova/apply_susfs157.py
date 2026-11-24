@@ -139,7 +139,7 @@ def patch_sys_prctl():
     m = re.search(r"SYSCALL_DEFINE5\(prctl,", s)
     if not m:
         sys.exit("[!] kernel/sys.c: prctl syscall not found")
-    decl = s.find("\tlong error;", m.end())
+    decl = s.find("long error;", m.end())
     if decl < 0:
         sys.exit("[!] kernel/sys.c: 'long error;' not found in prctl")
     eol = s.find("\n", decl)
@@ -164,13 +164,14 @@ def patch_ksu_init():
     if "susfs_legacy_init" in s:
         print("[=] ksu_main.c already patched")
         return
-    anchor = "\tksu_feature_init();"
-    if anchor not in s:
+    m = re.search(r"^([ \t]*)ksu_feature_init\(\);", s, re.M)
+    if not m:
         sys.exit("[!] ksu_main.c: ksu_feature_init() anchor not found")
+    indent = m.group(1)
     block = ("#ifdef CONFIG_KSU_SUSFS_LEGACY\n"
-             "\tsusfs_legacy_init();\n"
+             + indent + "susfs_legacy_init();\n"
              "#endif\n")
-    s = s.replace(anchor, block + anchor, 1)
+    s = s[:m.start()] + block + s[m.start():]
     # forward declaration, the object lives in feature/
     s = s.replace("int __init kernelsu_init(void)",
                   "void susfs_legacy_init(void);\n\nint __init kernelsu_init(void)", 1)
