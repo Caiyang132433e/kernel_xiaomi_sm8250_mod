@@ -90,7 +90,7 @@ clang --version
 KSU_ZIP_STR=NoKernelSU
 if [ "$2" == "ksu" ]; then
     KSU_ENABLE=1
-    KSU_ZIP_STR=SukiSU-SUSFS
+    KSU_ZIP_STR=Nova-NoSUSFS
 else
     KSU_ENABLE=0
 fi
@@ -101,6 +101,8 @@ echo "TARGET_DEVICE: $TARGET_DEVICE"
 if [ $KSU_ENABLE -eq 1 ]; then
     echo "KSU is enabled (SukiSU-Nova ${KSU_REF})"
     KSU_VERSION_PIN="${KSU_VERSION_PIN}" bash scripts/nova/setup_nova.sh "${KSU_BRANCH}" "${KSU_REF}"
+    # 4.19 tree adaptations: exec call sites (NULL deref fix) + reboot supercall hook
+    python3 scripts/nova/apply_tree_hooks.py
 else
     echo "KSU is disabled"
 fi
