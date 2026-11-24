@@ -9,8 +9,9 @@ TOOLCHAIN_PATH=$HOME/proton-clang/proton-clang-20210522/bin
 GIT_COMMIT_ID=$(git rev-parse --short=8 HEAD)
 TARGET_DEVICE=$1
 
-# SukiSU-Nova (non-GKI, 4.19) integration
-KSU_REF="${KSU_REF:-c60f21b9e00e35e898f8d21e0612465b76b9beec}"
+# SukiSU-Nova (non-GKI, 4.19) integration -- builtin branch = manual hooks
+KSU_BRANCH="${KSU_BRANCH:-builtin}"
+KSU_REF="${KSU_REF:-4bec532dd447e2852aa8932afa768255350c103a}"
 KSU_VERSION_PIN="${KSU_VERSION_PIN:-35000}"
 
 if [ -z "$1" ]; then
@@ -99,7 +100,7 @@ echo "TARGET_DEVICE: $TARGET_DEVICE"
 
 if [ $KSU_ENABLE -eq 1 ]; then
     echo "KSU is enabled (SukiSU-Nova ${KSU_REF})"
-    KSU_VERSION_PIN="${KSU_VERSION_PIN}" bash scripts/nova/setup_nova.sh "${KSU_REF}"
+    KSU_VERSION_PIN="${KSU_VERSION_PIN}" bash scripts/nova/setup_nova.sh "${KSU_BRANCH}" "${KSU_REF}"
 else
     echo "KSU is disabled"
 fi
@@ -149,9 +150,8 @@ make $MAKE_ARGS ${TARGET_DEVICE}_defconfig
 if [ $KSU_ENABLE -eq 1 ]; then
     scripts/config --file out/.config \
     -e KSU \
-    -e KPROBES \
-    -e KRETPROBES \
     -e KSU_DEBUG \
+    -d KSU_SUSFS \
     -e PSTORE \
     -e PSTORE_RAM \
     -e PSTORE_CONSOLE \
@@ -281,9 +281,8 @@ make $MAKE_ARGS ${TARGET_DEVICE}_defconfig
 if [ $KSU_ENABLE -eq 1 ]; then
     scripts/config --file out/.config \
     -e KSU \
-    -e KPROBES \
-    -e KRETPROBES \
     -e KSU_DEBUG \
+    -d KSU_SUSFS \
     -e PSTORE \
     -e PSTORE_RAM \
     -e PSTORE_CONSOLE \
